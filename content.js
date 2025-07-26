@@ -1,5 +1,9 @@
-// == Core Functions == //
-async function convertJpegBlobToPngBlob(jpegBlob) {
+// == Thumbnail Utils == //
+
+async function fetchAsPngBlob(url) {
+  const res = await fetch(url);
+  const jpegBlob = await res.blob();
+
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => {
@@ -8,13 +12,8 @@ async function convertJpegBlobToPngBlob(jpegBlob) {
       canvas.height = img.height;
       const ctx = canvas.getContext('2d');
       ctx.drawImage(img, 0, 0);
-
-      canvas.toBlob((pngBlob) => {
-        if (pngBlob) {
-          resolve(pngBlob);
-        } else {
-          reject(new Error('Failed to convert JPEG to PNG'));
-        }
+      canvas.toBlob((blob) => {
+        blob ? resolve(blob) : reject(new Error('Conversion failed'));
       }, 'image/png');
     };
     img.onerror = reject;
@@ -22,124 +21,146 @@ async function convertJpegBlobToPngBlob(jpegBlob) {
   });
 }
 
-function createStealthButton(videoId) {
+function getVideoIdFromAnchor(anchor) {
+  const href = anchor?.getAttribute('href');
+  const match = href?.match(/v=([a-zA-Z0-9_-]+)/);
+  return match?.[1] || null;
+}
+
+// == Button UI == //
+
+function createIconButton(label, title, onClick) {
+  const btn = document.createElement('div');
+  btn.textContent = label;
+  btn.title = title;
+  Object.assign(btn.style, buttonStyle());
+
+  btn.onclick = (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    onClick(btn);
+  };
+  return btn;
+}
+
+function createButtonOverlay() {
   const wrapper = document.createElement('div');
   wrapper.className = 'thumb-hover-zone';
-  Object.assign(wrapper.style, baseWrapperStyle());
+  Object.assign(wrapper.style, wrapperStyle());
 
   const container = document.createElement('div');
-  Object.assign(container.style, baseContainerStyle());
+  Object.assign(container.style, containerStyle());
 
-  const viewBtn = createIconButton('🔍', 'View maxres thumbnail', () => {
-    window.open(`https://i3.ytimg.com/vi/${videoId}/maxresdefault.jpg`, '_blank');
-  });
-
-  const downloadBtn = createIconButton('⬇️', 'Download maxres thumbnail', async () => {
-    const url = `https://i3.ytimg.com/vi/${videoId}/maxresdefault.jpg`;
-    try {
-      const res = await fetch(url);
-      const blob = await res.blob();
-      const objectUrl = URL.createObjectURL(blob);
-
-      const a = document.createElement('a');
-      a.href = objectUrl;
-      a.download = `${videoId}_maxres.jpg`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(objectUrl);
-    } catch (err) {
-      alert('⚠️ Failed to download thumbnail!');
-      console.error(err);
-    }
-  });
-
-  const copyBtn = createIconButton('📋', 'Copy thumbnail to clipboard', async () => {
-    const url = `https://i3.ytimg.com/vi/${videoId}/maxresdefault.jpg`;
-  
-    try {
-      const res = await fetch(url);
-      const jpegBlob = await res.blob();
-      const pngBlob = await convertJpegBlobToPngBlob(jpegBlob);
-  
-      window.ClipboardItem = window.ClipboardItem || window.WebKitClipboardItem || class ClipboardItem {
-        constructor(items) {
-          this.items = items;
-        }
-      };
-  
-      const item = new ClipboardItem({ 'image/png': pngBlob });
-      await navigator.clipboard.write([item]);
-  
-      alert('✅ Thumbnail copied to clipboard (as PNG)!');
-    } catch (err) {
-      alert('⚠️ Failed to copy thumbnail!');
-      console.error('Copy error:', err);
-    }
-  });
-
-  container.append(viewBtn, downloadBtn, copyBtn);
   wrapper.appendChild(container);
-
   wrapper.addEventListener('mouseenter', () => {
     container.style.opacity = '1';
     container.style.pointerEvents = 'auto';
   });
-
   wrapper.addEventListener('mouseleave', () => {
     container.style.opacity = '0';
     container.style.pointerEvents = 'none';
   });
 
+  return { wrapper, container };
+}
+
+function createThumbnailButtons(anchor) {
+  const videoId = getVideoIdFromAnchor(anchor);
+  if (!videoId) return null;
+
+  const { wrapper, container } = createButtonOverlay();
+
+  const viewBtn = createIconButton('🔍', 'View thumbnail', () =>
+    window.open(`https://i3.ytimg.com/vi/${videoId}/maxresdefault.jpg`, '_blank')
+  );
+
+  const downloadBtn = createIconButton('⬇️', 'Download thumbnail', async () => {
+    try {
+      const url = `https://i3.ytimg.com/vi/${videoId}/maxresdefault.jpg`;
+      const blob = await fetch(url).then((res) => res.blob());
+      const blobURL = URL.createObjectURL(blob);
+
+      const a = document.createElement('a');
+      a.href = blobURL;
+      a.download = `${videoId}_maxres.jpg`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(blobURL);
+    } catch (err) {
+      alert('⚠️ Failed to download thumbnail.');
+      console.error(err);
+    }
+  });
+
+  const copyBtn = createIconButton('📋', 'Copy thumbnail to clipboard', async (btn) => {
+    try {
+      const originalBg = btn.style.background;
+      btn.style.background = '#fffb00ff';
+      setTimeout(() => {
+        btn.style.background = originalBg;
+      }, 1000);
+
+      const url = `https://i3.ytimg.com/vi/${videoId}/maxresdefault.jpg`;
+      const pngBlob = await fetchAsPngBlob(url);
+      const item = new ClipboardItem({ 'image/png': pngBlob });
+      await navigator.clipboard.write([item]);
+    } catch (err) {
+      console.error(err);
+    }
+  });
+
+  container.append(viewBtn, downloadBtn, copyBtn);
   return wrapper;
 }
 
-function createIconButton(icon, title, onClick) {
-  const btn = document.createElement('div');
-  btn.textContent = icon;
-  btn.title = title;
-  Object.assign(btn.style, baseBtnStyle());
-  btn.onclick = (e) => {
-    e.stopPropagation();
-    e.preventDefault();
-    onClick();
-  };
-  return btn;
-}
+// == DOM Integration == //
 
-function addStealthButton(thumbnailAnchor) {
-  const href = thumbnailAnchor.getAttribute('href');
-  const match = href?.match(/v=([a-zA-Z0-9_-]+)/);
-  if (!match) return;
-
-  const videoId = match[1];
-  const container = thumbnailAnchor.parentElement;
-  if (!container || container.querySelector('.thumb-hover-zone')) return;
-
-  container.style.position = 'relative';
-  const stealthButton = createStealthButton(videoId);
-  container.appendChild(stealthButton);
-}
-
-function scanThumbnails() {
-  document.querySelectorAll('a#thumbnail[href*="watch?v="]').forEach(addStealthButton);
-}
-
-function addStealthToWatchPage() {
-  const cuedThumb = document.querySelector('.ytp-cued-thumbnail-overlay');
-  if (!cuedThumb || cuedThumb.querySelector('.thumb-hover-zone')) return;
-
-  const url = new URL(window.location.href);
-  const videoId = url.searchParams.get('v');
+function injectButtonsIntoThumbnail(anchor) {
+  const videoId = getVideoIdFromAnchor(anchor);
   if (!videoId) return;
 
-  cuedThumb.style.position = 'relative';
-  cuedThumb.appendChild(createStealthButton(videoId));
+  const parent = anchor.parentElement;
+  if (!parent) return;
+
+  const existing = parent.querySelector('.thumb-hover-zone');
+  if (existing) {
+    const currentId = existing.getAttribute('data-stealth-id');
+    if (currentId === videoId) return;
+    existing.remove();
+  }
+
+  const buttons = createThumbnailButtons(anchor);
+  if (!buttons) return;
+
+  buttons.setAttribute('data-stealth-id', videoId);
+  parent.style.position = 'relative';
+  parent.appendChild(buttons);
 }
 
-// == Style == //
+function scanAllThumbnails() {
+  document.querySelectorAll('a#thumbnail[href*="watch?v="]').forEach(injectButtonsIntoThumbnail);
+}
 
-function baseWrapperStyle() {
+function injectButtonToWatchPage() {
+  const overlay = document.querySelector('.ytp-cued-thumbnail-overlay');
+  if (!overlay || overlay.querySelector('.thumb-hover-zone')) return;
+
+  const videoId = new URL(location.href).searchParams.get('v');
+  if (!videoId) return;
+
+  const dummyAnchor = document.createElement('a');
+  dummyAnchor.href = `/watch?v=${videoId}`;
+  const buttons = createThumbnailButtons(dummyAnchor);
+  if (buttons) {
+    overlay.style.position = 'relative';
+    overlay.appendChild(buttons);
+  }
+}
+
+// == Styles == //
+
+function wrapperStyle() {
   return {
     position: 'absolute',
     top: '0',
@@ -150,7 +171,7 @@ function baseWrapperStyle() {
   };
 }
 
-function baseContainerStyle() {
+function containerStyle() {
   return {
     opacity: '0',
     pointerEvents: 'none',
@@ -164,7 +185,7 @@ function baseContainerStyle() {
   };
 }
 
-function baseBtnStyle() {
+function buttonStyle() {
   return {
     background: 'rgba(0,0,0,0.7)',
     color: 'white',
@@ -178,12 +199,14 @@ function baseBtnStyle() {
 
 // == Init == //
 
-setTimeout(() => {
-  scanThumbnails();
-  addStealthToWatchPage();
-}, 1500);
+function init() {
+  scanAllThumbnails();
+  injectButtonToWatchPage();
 
-new MutationObserver(() => {
-  scanThumbnails();
-  addStealthToWatchPage();
-}).observe(document.body, { childList: true, subtree: true });
+  new MutationObserver(() => {
+    scanAllThumbnails();
+    injectButtonToWatchPage();
+  }).observe(document.body, { childList: true, subtree: true });
+}
+
+setTimeout(init, 1000);
