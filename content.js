@@ -1,5 +1,3 @@
-// == Thumbnail Utils == //
-
 async function fetchAsPngBlob(url) {
   const res = await fetch(url);
   const jpegBlob = await res.blob();
@@ -27,13 +25,26 @@ function getVideoIdFromAnchor(anchor) {
   return match?.[1] || null;
 }
 
-// == Button UI == //
-
-function createIconButton(label, title, onClick) {
+function createIconButton(label, title, accentColor, onClick) {
   const btn = document.createElement('div');
   btn.textContent = label;
   btn.title = title;
-  Object.assign(btn.style, buttonStyle());
+  Object.assign(btn.style, buttonStyle(accentColor));
+
+  btn.addEventListener('mouseenter', () => {
+    btn.style.filter = 'brightness(1.25)';
+    btn.style.transform = 'scale(1.08)';
+  });
+  btn.addEventListener('mouseleave', () => {
+    btn.style.filter = 'brightness(1)';
+    btn.style.transform = 'scale(1)';
+  });
+  btn.addEventListener('mousedown', () => {
+    btn.style.transform = 'scale(0.94)';
+  });
+  btn.addEventListener('mouseup', () => {
+    btn.style.transform = 'scale(1.08)';
+  });
 
   btn.onclick = (e) => {
     e.stopPropagation();
@@ -43,168 +54,204 @@ function createIconButton(label, title, onClick) {
   return btn;
 }
 
-function createButtonOverlay() {
-  const wrapper = document.createElement('div');
-  wrapper.className = 'thumb-hover-zone';
-  Object.assign(wrapper.style, wrapperStyle());
-
-  const container = document.createElement('div');
-  Object.assign(container.style, containerStyle());
-
-  wrapper.appendChild(container);
-  wrapper.addEventListener('mouseenter', () => {
-    container.style.opacity = '1';
-    container.style.pointerEvents = 'auto';
-  });
-  wrapper.addEventListener('mouseleave', () => {
-    container.style.opacity = '0';
-    container.style.pointerEvents = 'none';
-  });
-
-  return { wrapper, container };
-}
-
-function createThumbnailButtons(anchor) {
-  const videoId = getVideoIdFromAnchor(anchor);
-  if (!videoId) return null;
-
-  const { wrapper, container } = createButtonOverlay();
-
-  const viewBtn = createIconButton('🔍', 'View thumbnail', () =>
-    window.open(`https://i3.ytimg.com/vi/${videoId}/maxresdefault.jpg`, '_blank')
+function buildButtons(videoId, container) {
+  const viewBtn = createIconButton('🔍', 'View thumbnail',
+    'linear-gradient(135deg, #1a6fc4 0%, #2389e8 100%)',
+    () => window.open(`https://i3.ytimg.com/vi/${videoId}/maxresdefault.jpg`, '_blank')
   );
 
-  const downloadBtn = createIconButton('⬇️', 'Download thumbnail', async () => {
-    try {
-      const url = `https://i3.ytimg.com/vi/${videoId}/maxresdefault.jpg`;
-      const blob = await fetch(url).then((res) => res.blob());
-      const blobURL = URL.createObjectURL(blob);
-
-      const a = document.createElement('a');
-      a.href = blobURL;
-      a.download = `${videoId}_maxres.jpg`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(blobURL);
-    } catch (err) {
-      alert('⚠️ Failed to download thumbnail.');
-      console.error(err);
+  const downloadBtn = createIconButton('⬇️', 'Download thumbnail',
+    'linear-gradient(135deg, #1a8a4a 0%, #22b05e 100%)',
+    async () => {
+      try {
+        const url = `https://i3.ytimg.com/vi/${videoId}/maxresdefault.jpg`;
+        const blob = await fetch(url).then((r) => r.blob());
+        const blobURL = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = blobURL;
+        a.download = `${videoId}_maxres.jpg`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(blobURL);
+      } catch (err) {
+        alert('⚠️ Failed to download thumbnail.');
+        console.error(err);
+      }
     }
-  });
+  );
 
-  const copyBtn = createIconButton('📋', 'Copy thumbnail to clipboard', async (btn) => {
-    try {
-      const originalBg = btn.style.background;
-      btn.style.background = '#fffb00ff';
-      setTimeout(() => {
-        btn.style.background = originalBg;
-      }, 1000);
+  const copyBtn = createIconButton('📋', 'Copy thumbnail to clipboard',
+    'linear-gradient(135deg, #b07a10 0%, #e0a020 100%)',
+    async (btn) => {
+      try {
+        const origBg = btn.style.background;
+        btn.style.background = 'linear-gradient(135deg, #f5e642 0%, #ffe066 100%)';
+        setTimeout(() => { btn.style.background = origBg; }, 900);
 
-      const url = `https://i3.ytimg.com/vi/${videoId}/maxresdefault.jpg`;
-      const pngBlob = await fetchAsPngBlob(url);
-      const item = new ClipboardItem({ 'image/png': pngBlob });
-      await navigator.clipboard.write([item]);
-    } catch (err) {
-      console.error(err);
+        const url = `https://i3.ytimg.com/vi/${videoId}/maxresdefault.jpg`;
+        const pngBlob = await fetchAsPngBlob(url);
+        const item = new ClipboardItem({ 'image/png': pngBlob });
+        await navigator.clipboard.write([item]);
+      } catch (err) {
+        console.error(err);
+      }
     }
-  });
+  );
 
   container.append(viewBtn, downloadBtn, copyBtn);
-  return wrapper;
 }
 
-// == DOM Integration == //
-
-function injectButtonsIntoThumbnail(anchor) {
+function injectOverlayIntoTitleLink(anchor) {
   const videoId = getVideoIdFromAnchor(anchor);
   if (!videoId) return;
+
+  if (anchor.dataset.stealthId === videoId) return;
+  anchor.dataset.stealthId = videoId;
 
   const parent = anchor.parentElement;
   if (!parent) return;
 
-  const existing = parent.querySelector('.thumb-hover-zone');
-  if (existing) {
-    const currentId = existing.getAttribute('data-stealth-id');
-    if (currentId === videoId) return;
-    existing.remove();
-  }
+  const old = parent.querySelector('.yt-thumb-pill-wrapper');
+  if (old) old.remove();
 
-  const buttons = createThumbnailButtons(anchor);
-  if (!buttons) return;
+  const pill = document.createElement('div');
+  pill.className = 'yt-thumb-pill';
+  Object.assign(pill.style, {
+    position: 'absolute',
+    top: '-38px',
+    left: '0',
+    display: 'flex',
+    gap: '6px',
+    padding: '5px 8px',
+    borderRadius: '10px',
+    background: 'linear-gradient(135deg, rgba(15,15,25,0.90) 0%, rgba(30,30,55,0.93) 100%)',
+    backdropFilter: 'blur(10px)',
+    boxShadow: '0 4px 18px rgba(0,0,0,0.6), 0 1px 0 rgba(255,255,255,0.07) inset',
+    border: '1px solid rgba(255,255,255,0.13)',
+    opacity: '0',
+    pointerEvents: 'none',
+    zIndex: '99999',
+    transition: 'opacity 0.18s ease, top 0.22s cubic-bezier(0.34,1.56,0.64,1)',
+    whiteSpace: 'nowrap',
+  });
 
-  buttons.setAttribute('data-stealth-id', videoId);
-  parent.style.position = 'relative';
-  parent.appendChild(buttons);
+  buildButtons(videoId, pill);
+
+  const wrapper = document.createElement('div');
+  wrapper.className = 'yt-thumb-pill-wrapper';
+  Object.assign(wrapper.style, {
+    position: 'absolute',
+    pointerEvents: 'none',
+  });
+
+  wrapper.appendChild(pill);
+  parent.insertBefore(wrapper, anchor);
+
+  const show = (e) => {
+    console.log('[YT-Thumb] SHOW triggered by:', e?.currentTarget, 'Target:', e?.target);
+    pill.style.opacity = '1';
+    pill.style.top = '0px';
+    pill.style.pointerEvents = 'auto';
+  };
+
+  const hide = (e) => {
+    console.log('[YT-Thumb] HIDE triggered by:', e?.currentTarget, 'Target:', e?.target, 'RelatedTarget:', e?.relatedTarget);
+    pill.style.opacity = '0';
+    pill.style.top = '-38px';
+    pill.style.pointerEvents = 'none';
+  };
+
+  anchor.addEventListener('mouseenter', show);
+  anchor.addEventListener('mouseleave', (e) => {
+    if (!pill.contains(e.relatedTarget)) hide(e);
+  });
+
+  pill.addEventListener('mouseenter', show);
+  pill.addEventListener('mouseleave', (e) => {
+    if (!anchor.contains(e.relatedTarget)) hide(e);
+  });
 }
 
-function scanAllThumbnails() {
-  document.querySelectorAll('a#thumbnail[href*="watch?v="]').forEach(injectButtonsIntoThumbnail);
+function scanAllTitleLinks() {
+  document.querySelectorAll('a[href*="watch?v="]').forEach((anchor) => {
+    if (anchor.id === 'thumbnail') return;
+    if (anchor.id === 'video-title') return;
+    if (anchor.closest('#masthead, ytd-masthead, .ytp-title-link')) return;
+
+    injectOverlayIntoTitleLink(anchor);
+  });
 }
 
 function injectButtonToWatchPage() {
   const overlay = document.querySelector('.ytp-cued-thumbnail-overlay');
-  if (!overlay || overlay.querySelector('.thumb-hover-zone')) return;
+  if (!overlay || overlay.querySelector('.yt-thumb-pill')) return;
 
   const videoId = new URL(location.href).searchParams.get('v');
   if (!videoId) return;
 
-  const dummyAnchor = document.createElement('a');
-  dummyAnchor.href = `/watch?v=${videoId}`;
-  const buttons = createThumbnailButtons(dummyAnchor);
-  if (buttons) {
-    overlay.style.position = 'relative';
-    overlay.appendChild(buttons);
-  }
-}
-
-// == Styles == //
-
-function wrapperStyle() {
-  return {
-    position: 'absolute',
-    top: '0',
-    left: '0',
-    width: '80px',
-    height: '60px',
-    zIndex: '9998',
-  };
-}
-
-function containerStyle() {
-  return {
-    opacity: '0',
-    pointerEvents: 'none',
+  const pill = document.createElement('div');
+  pill.className = 'yt-thumb-pill';
+  Object.assign(pill.style, {
     position: 'absolute',
     top: '8px',
     left: '8px',
     display: 'flex',
-    gap: '4px',
-    zIndex: '9999',
+    gap: '6px',
+    padding: '5px 8px',
+    borderRadius: '10px',
+    background: 'linear-gradient(135deg, rgba(15,15,25,0.90) 0%, rgba(30,30,55,0.93) 100%)',
+    backdropFilter: 'blur(10px)',
+    boxShadow: '0 4px 18px rgba(0,0,0,0.6), 0 1px 0 rgba(255,255,255,0.07) inset',
+    border: '1px solid rgba(255,255,255,0.13)',
+    opacity: '0',
+    pointerEvents: 'none',
+    zIndex: '99999',
     transition: 'opacity 0.2s ease',
-  };
+    whiteSpace: 'nowrap',
+  });
+
+  buildButtons(videoId, pill);
+  overlay.style.position = 'relative';
+  overlay.appendChild(pill);
+
+  overlay.addEventListener('mouseenter', (e) => {
+    console.log('[YT-Thumb] Watch Page SHOW triggered by:', e.currentTarget, 'Target:', e.target);
+    pill.style.opacity = '1';
+    pill.style.pointerEvents = 'auto';
+  });
+  overlay.addEventListener('mouseleave', (e) => {
+    console.log('[YT-Thumb] Watch Page HIDE triggered by:', e.currentTarget, 'Target:', e.target, 'RelatedTarget:', e.relatedTarget);
+    pill.style.opacity = '0';
+    pill.style.pointerEvents = 'none';
+  });
 }
 
-function buttonStyle() {
+function buttonStyle(accentColor) {
   return {
-    background: 'rgba(0,0,0,0.7)',
+    background: accentColor || 'rgba(255,255,255,0.10)',
     color: 'white',
-    fontSize: '16px',
-    padding: '4px 6px',
-    borderRadius: '4px',
+    fontSize: '15px',
+    padding: '5px 8px',
+    borderRadius: '7px',
     cursor: 'pointer',
-    transition: 'opacity 0.2s ease',
+    border: '1px solid rgba(255,255,255,0.15)',
+    boxShadow: '0 2px 6px rgba(0,0,0,0.35)',
+    transition: 'filter 0.15s ease, transform 0.12s ease',
+    userSelect: 'none',
+    lineHeight: '1',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
   };
 }
-
-// == Init == //
 
 function init() {
-  scanAllThumbnails();
+  scanAllTitleLinks();
   injectButtonToWatchPage();
 
   new MutationObserver(() => {
-    scanAllThumbnails();
+    scanAllTitleLinks();
     injectButtonToWatchPage();
   }).observe(document.body, { childList: true, subtree: true });
 }
