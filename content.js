@@ -1,3 +1,16 @@
+let isDevMode = false;
+browser.runtime.sendMessage({ type: 'GET_DEV_MODE' }, (response) => {
+  if (response && response.isDevMode) {
+    isDevMode = true;
+  }
+});
+
+function debugLog(...args) {
+  if (isDevMode) {
+    console.log(...args);
+  }
+}
+
 async function fetchAsPngBlob(url) {
   const res = await fetch(url);
   const jpegBlob = await res.blob();
@@ -149,14 +162,14 @@ function injectOverlayIntoTitleLink(anchor) {
   parent.insertBefore(wrapper, anchor);
 
   const show = (e) => {
-    console.log('[YT-Thumb] SHOW triggered by:', e?.currentTarget, 'Target:', e?.target);
+    debugLog('[YT-Thumb] SHOW triggered by:', e?.currentTarget, 'Target:', e?.target);
     pill.style.opacity = '1';
     pill.style.top = '0px';
     pill.style.pointerEvents = 'auto';
   };
 
   const hide = (e) => {
-    console.log('[YT-Thumb] HIDE triggered by:', e?.currentTarget, 'Target:', e?.target, 'RelatedTarget:', e?.relatedTarget);
+    debugLog('[YT-Thumb] HIDE triggered by:', e?.currentTarget, 'Target:', e?.target, 'RelatedTarget:', e?.relatedTarget);
     pill.style.opacity = '0';
     pill.style.top = '-38px';
     pill.style.pointerEvents = 'none';
@@ -216,12 +229,12 @@ function injectButtonToWatchPage() {
   overlay.appendChild(pill);
 
   overlay.addEventListener('mouseenter', (e) => {
-    console.log('[YT-Thumb] Watch Page SHOW triggered by:', e.currentTarget, 'Target:', e.target);
+    debugLog('[YT-Thumb] Watch Page SHOW triggered by:', e.currentTarget, 'Target:', e.target);
     pill.style.opacity = '1';
     pill.style.pointerEvents = 'auto';
   });
   overlay.addEventListener('mouseleave', (e) => {
-    console.log('[YT-Thumb] Watch Page HIDE triggered by:', e.currentTarget, 'Target:', e.target, 'RelatedTarget:', e.relatedTarget);
+    debugLog('[YT-Thumb] Watch Page HIDE triggered by:', e.currentTarget, 'Target:', e.target, 'RelatedTarget:', e.relatedTarget);
     pill.style.opacity = '0';
     pill.style.pointerEvents = 'none';
   });
