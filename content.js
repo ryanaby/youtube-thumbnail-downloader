@@ -188,8 +188,10 @@ function injectOverlayIntoTitleLink(anchor) {
 
 function scanAllTitleLinks() {
   document.querySelectorAll('a[href*="watch?v="]').forEach((anchor) => {
+    debugLog('[YT-Thumb] Scanning anchor:', anchor, 'className:', anchor.className, 'id:', anchor.id);
     if (anchor.id === 'thumbnail') return;
     if (anchor.id === 'video-title') return;
+    if (anchor.className === 'ytLockupMetadataViewModelTitle') return;
     if (anchor.closest('#masthead, ytd-masthead, .ytp-title-link')) return;
 
     injectOverlayIntoTitleLink(anchor);
